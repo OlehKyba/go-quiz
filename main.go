@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 )
 
 type problem struct {
@@ -54,8 +55,20 @@ func parseLines(lines [][]string) ([]problem, error) {
 	return problems, nil
 }
 
+func waitUserInput(userInputCh chan<- string) {
+	for {
+		var userInput string
+		_, err := fmt.Scanf("%s\n", &userInput)
+		if err != nil {
+			fmt.Printf("Failed to read your answer: %s\n", err.Error())
+		}
+		userInputCh <- userInput
+	}
+}
+
 func main() {
 	fileName := flag.String("csv", "./problems/example.csv", "a csv file in format 'question;...options;answer'")
+	timeLimit := flag.Int("limit", 30, "the time limit for one problem")
 	flag.Parse()
 
 	file, err := os.Open(*fileName)
@@ -84,26 +97,33 @@ func main() {
 	}
 
 	correctAnswers := 0
+	limitDuration := time.Duration(*timeLimit) * time.Second
+	userInputCh := make(chan string)
+	go waitUserInput(userInputCh)
+
 	for i, p := range problems {
 		fmt.Printf("Problem #%d: %s\n", i+1, p.question)
 		for j, option := range p.options {
 			fmt.Printf("%d) %s\n", j+1, option)
 		}
 
-		var userInput string
-		_, err := fmt.Scanf("%s\n", &userInput)
-		if err != nil {
-			fmt.Printf("Failed to read your answer: %s\n", err.Error())
-			continue
-		}
+		select {
+		case <-time.After(limitDuration):
+			fmt.Println("The time is up! Moving on to the next question.")
+		case userInput := <-userInputCh:
+			if userInput == "" {
+				continue
+			}
 
-		answer, err := strconv.Atoi(userInput)
-		if err != nil {
-			fmt.Printf("Failed to read your answer. Expected number, but got: %s\n", userInput)
-		}
+			answer, err := strconv.Atoi(userInput)
+			if err != nil {
+				fmt.Printf("Failed to read your answer. Expected number, but got: %s\n", userInput)
+				continue
+			}
 
-		if answer == p.answer {
-			correctAnswers++
+			if answer == p.answer {
+				correctAnswers++
+			}
 		}
 	}
 
